@@ -1,1 +1,38 @@
+pipeline {
+    agent any
+    tools {
+        maven 'maven3.9.9'
+    }
 
+    stages {
+        stage('1.ckeckout') {
+            steps {
+                echo 'checking code'
+                git "https://github.com/africaprocloud/maven-web-app.git"
+            }
+        }
+        stage('2.buildCode') {
+            steps {
+                echo "build code"
+                sh "mvn package"
+            }
+        }
+        stage('3.CodeQA') {
+            steps {
+               echo "running CodeQA with sonarQube"
+               sh "mvn sonar:sonar"
+            }
+        }
+        stage('4.UploadArtifacts 2 Nexus') {
+            steps {
+                echo "ArtifactsUpload"
+                sh "mvn deploy"
+            }
+        }
+        stage('dpeloy2Dev') {
+            steps {
+                echo "review and approve app 2 UAT"
+            }
+        }
+    }
+}
