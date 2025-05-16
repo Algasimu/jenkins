@@ -1,0 +1,111 @@
+pipeline {
+    agent any
+
+    tools {
+        maven 'maven3.9.9'
+    }
+
+    stages {
+        stage('1. Checkout') {
+            steps {
+                echo 'Cloning the latest version of the code...'
+                git 'https://github.com/Algasimu/maven-web-app.git'
+            }
+        }
+
+        stage('2. Compile') {
+            steps {
+                echo 'Compiling the code...'
+                sh 'mvn compile'
+            }
+        }
+
+        stage('3. Test') {
+            steps {
+                echo 'Running JUnit tests...'
+                sh 'mvn test'
+            }
+        }
+
+        stage('4. File System Scan with Trivy') {
+            steps {
+                echo 'Scanning project directory for vulnerabilities...'
+                  sh 'trivy fs --format table -o trivy-fs-report.html .' 
+            }
+        }
+
+        stage('5. Code Quality Analysis with SonarQube') {
+            steps {
+                echo 'Running SonarQube analysis...'
+                sh 'mvn sonar:sonar'
+            }
+        }
+
+        stage('6. Maven Build') {
+            steps {
+                echo 'Packaging the application...'
+                sh 'mvn package'
+            }
+        }
+
+        stage('7. Upload Artifact to Nexus') {
+            steps {
+                echo 'Uploading artifact to Nexus repository...'
+                sh 'mvn deploy'
+            }
+        }
+
+        stage('8. Docker Build') {
+            steps {
+                echo 'Building and tagging Docker image...'
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'Docker') {
+                        sh 'docker build -t algajallow/apci-webapp .'
+                    }
+                }
+            }
+        }
+
+        stage('9. Docker Image Scan with Trivy') {
+            steps {
+                echo 'Scanning Docker image for vulnerabilities...'
+                sh 'trivy image --format table -o trivy-image-report.html algajallow/apci-webapp'
+            }
+        }
+
+        stage('10. Push Docker Image to Registry') {
+            steps {
+                echo 'Pushing Docker image to registry...'
+                script {
+                    withDockerRegistry(credentialsId: 'docker-cred', toolName: 'Docker') {
+                        sh 'docker push algajallow/apci-webapp'
+                    }
+                }
+            }
+        }
+
+        stage('11. Deploy to Kubernetes') {
+            steps {
+                echo 'Deploying application to Kubernetes cluster...'
+                withKubeConfig(
+                    credentialsId: 'k8s-credentials',
+                    clusterName: 'kubernetes',
+                    serverUrl: 'https://172.31.9.232:6443',
+                    namespace: 'webapps',
+                    restrictKubeConfigAccess: false
+                ) {
+                    sh 'kubectl apply -f k8s-deploy.yml'
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully.'
+        }
+        failure {
+            echo 'Pipeline failed. Please check the logs for details.'
+        }
+    }
+}
